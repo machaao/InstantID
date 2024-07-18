@@ -4,6 +4,8 @@
 import os
 import sys
 
+from cog.types import URLPath
+
 sys.path.append(os.path.join(os.path.dirname(__file__), ".."))
 sys.path.append(os.path.join(os.path.dirname(__file__), "../gradio_demo"))
 
@@ -527,7 +529,7 @@ class Predictor(BasePredictor):
 
     def predict(
         self,
-        image: Path = Input(
+        image: URLPath = Input(
             description="Input face image",
         ),
         pose_image: Path = Input(
