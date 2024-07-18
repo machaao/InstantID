@@ -416,14 +416,12 @@ class Predictor(BasePredictor):
                 f"Cannot find any input face `image`! Please upload the face `image`"
             )
 
-        # integrate cache
-        face_info, face_image, face_image_cv2 = self.face_embed_cache.get(face_image_path)
-
-        if not face_info:
+        # integrate face cache
+        face_cache = self.face_embed_cache.get(face_image_path, None)
+        if not face_cache:
             face_image = load_image(face_image_path)
             face_image = resize_img(face_image)
             face_image_cv2 = convert_from_image_to_cv2(face_image)
-            height, width, _ = face_image_cv2.shape
 
             # Extract face features
             face_info = self.app.get(face_image_cv2)
@@ -442,13 +440,17 @@ class Predictor(BasePredictor):
 
             # add to cache for speed up
             print(f"adding to the face cache: {face_image_path}")
-            self.face_embed_cache[face_image_path] = face_info, face_image, face_image_cv2
+            self.face_embed_cache[face_image_path] = {"face_info": face_info, "face_image": face_image, "face_image_cv2": face_image_cv2}
         else:
             print(f"loaded from face cache: {face_image_path}")
+            face_info = face_cache["face_info"]
+            face_image = face_cache["face_image"]
+            face_image_cv2 = face_cache["face_image_cv2"]
 
         # only use the maximum face
         face_emb = face_info["embedding"]
         face_kps = draw_kps(convert_from_cv2_to_image(face_image_cv2), face_info["kps"])
+        height, width, _ = face_image_cv2.shape
 
         img_controlnet = face_image
         if pose_image_path is not None:
