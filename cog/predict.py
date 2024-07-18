@@ -63,6 +63,7 @@ SDXL_NAME_TO_PATHLIKE = {
         "slug": "stabilityai/stable-diffusion-xl-base-1.0",
         "url": "https://weights.replicate.delivery/default/InstantID/models--stabilityai--stable-diffusion-xl-base-1.0.tar",
         "path": "checkpoints/models--stabilityai--stable-diffusion-xl-base-1.0",
+        "hugging_face_hub": True
     },
     "afrodite-xl-v2": {
         "slug": "stablediffusionapi/afrodite-xl-v2",
@@ -237,6 +238,7 @@ class Predictor(BasePredictor):
 
         self.load_weights("stable-diffusion-xl-base-1.0")
         self.setup_safety_checker()
+        self.face_embed_cache = {}
 
     def setup_safety_checker(self):
         print(f"[~] Seting up safety checker")
@@ -285,7 +287,6 @@ class Predictor(BasePredictor):
                 controlnet=[self.controlnet_identitynet],
                 torch_dtype=DTYPE,
                 cache_dir=CHECKPOINTS_CACHE,
-                local_files_only=True,
                 safety_checker=None,
                 feature_extractor=None,
             )
@@ -414,25 +415,37 @@ class Predictor(BasePredictor):
                 f"Cannot find any input face `image`! Please upload the face `image`"
             )
 
-        face_image = load_image(face_image_path)
-        face_image = resize_img(face_image)
-        face_image_cv2 = convert_from_image_to_cv2(face_image)
-        height, width, _ = face_image_cv2.shape
+        # integrate cache
+        face_info, face_image, face_image_cv2 = self.face_embed_cache.get(face_image_path)
 
-        # Extract face features
-        face_info = self.app.get(face_image_cv2)
+        if not face_info:
+            face_image = load_image(face_image_path)
+            face_image = resize_img(face_image)
+            face_image_cv2 = convert_from_image_to_cv2(face_image)
+            height, width, _ = face_image_cv2.shape
 
-        if len(face_info) == 0:
-            raise Exception(
-                "Face detector could not find a face in the `image`. Please use a different `image` as input."
-            )
+            # Extract face features
+            face_info = self.app.get(face_image_cv2)
 
-        face_info = sorted(
-            face_info,
-            key=lambda x: (x["bbox"][2] - x["bbox"][0]) * x["bbox"][3] - x["bbox"][1],
-        )[
-            -1
-        ]  # only use the maximum face
+            if len(face_info) == 0:
+                raise Exception(
+                    "Face detector could not find a face in the `image`. Please use a different `image` as input."
+                )
+
+            face_info = sorted(
+                face_info,
+                key=lambda x: (x["bbox"][2] - x["bbox"][0]) * x["bbox"][3] - x["bbox"][1],
+            )[
+                -1
+            ]
+
+            # add to cache for speed up
+            print(f"adding to the face cache: {face_image_path}")
+            self.face_embed_cache[face_image_path] = face_info, face_image, face_image_cv2
+        else:
+            print(f"loaded from face cache: {face_image_path}")
+            
+        # only use the maximum face
         face_emb = face_info["embedding"]
         face_kps = draw_kps(convert_from_cv2_to_image(face_image_cv2), face_info["kps"])
 
