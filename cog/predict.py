@@ -529,8 +529,8 @@ class Predictor(BasePredictor):
 
     def predict(
         self,
-        image: URLPath = Input(
-            description="Input face image",
+        image: str = Input(
+            description="Image URL",
         ),
         pose_image: Path = Input(
             description="(Optional) reference pose image",
