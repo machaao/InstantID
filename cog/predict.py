@@ -63,7 +63,7 @@ SDXL_NAME_TO_PATHLIKE = {
         "slug": "stabilityai/stable-diffusion-xl-base-1.0",
         "url": "https://weights.replicate.delivery/default/InstantID/models--stabilityai--stable-diffusion-xl-base-1.0.tar",
         "path": "checkpoints/models--stabilityai--stable-diffusion-xl-base-1.0",
-        "hugging_face_hub": True
+        "download_from_hf": True
     },
     "afrodite-xl-v2": {
         "slug": "stablediffusionapi/afrodite-xl-v2",
@@ -270,8 +270,9 @@ class Predictor(BasePredictor):
         weights_info = SDXL_NAME_TO_PATHLIKE[self.base_weights]
 
         download_url = weights_info["url"]
+        download_from_hf = weights_info.get("download_from_hf", False)
         path_to_weights_dir = weights_info["path"]
-        if not os.path.exists(path_to_weights_dir):
+        if not os.path.exists(path_to_weights_dir) and not download_from_hf:
             download_weights(download_url, path_to_weights_dir)
 
         is_hugging_face_model = "slug" in weights_info.keys()
@@ -444,7 +445,7 @@ class Predictor(BasePredictor):
             self.face_embed_cache[face_image_path] = face_info, face_image, face_image_cv2
         else:
             print(f"loaded from face cache: {face_image_path}")
-            
+
         # only use the maximum face
         face_emb = face_info["embedding"]
         face_kps = draw_kps(convert_from_cv2_to_image(face_image_cv2), face_info["kps"])
