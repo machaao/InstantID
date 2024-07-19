@@ -26,7 +26,7 @@ from diffusers import LCMScheduler
 from diffusers.utils import load_image
 from diffusers.models import ControlNetModel
 from diffusers.pipelines.controlnet.multicontrolnet import MultiControlNetModel
-import face_recognition
+# import face_recognition
 from model_util import get_torch_device
 from insightface.app import FaceAnalysis
 from transformers import CLIPImageProcessor
