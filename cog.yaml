@@ -26,6 +26,7 @@ build:
     - "gradio==3.50.2"
     - "peft==0.8.2"
     - "transformers==4.37.0"
+    - "face-recognition"
     - "controlnet-aux==0.0.7"
     
     # fix for pydantic issues in cog

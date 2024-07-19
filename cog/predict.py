@@ -26,7 +26,7 @@ from diffusers import LCMScheduler
 from diffusers.utils import load_image
 from diffusers.models import ControlNetModel
 from diffusers.pipelines.controlnet.multicontrolnet import MultiControlNetModel
-
+import face_recognition
 from model_util import get_torch_device
 from insightface.app import FaceAnalysis
 from transformers import CLIPImageProcessor
@@ -293,6 +293,7 @@ class Predictor(BasePredictor):
                 safety_checker=None,
                 feature_extractor=None,
             )
+
             self.pipe.scheduler = diffusers.EulerDiscreteScheduler.from_config(
                 self.pipe.scheduler.config
             )
@@ -467,6 +468,12 @@ class Predictor(BasePredictor):
                 raise Exception(
                     "Face detector could not find a face in the `pose_image`. Please use a different `pose_image` as input."
                 )
+
+            # face_locations = face_recognition.face_locations(pose_image)
+            # if len(face_locations) > 1:
+            #     raise Exception(
+            #         "Face detector found more than one face in the `pose_image`. Please use a different `pose_image` as input."
+            #     )
 
             face_info = face_info[-1]
             face_kps = draw_kps(pose_image, face_info["kps"])
@@ -697,78 +704,83 @@ class Predictor(BasePredictor):
             seed = int.from_bytes(os.urandom(2), "big")
         print(f"Using seed: {seed}")
 
-        # Load the weights if they are different from the base weights
-        if sdxl_weights != self.base_weights:
-            self.load_weights(sdxl_weights)
+        # adding this to reduce GPU consumption
+        with torch.no_grad():
+            # Load the weights if they are different from the base weights
+            if sdxl_weights != self.base_weights:
+                self.load_weights(sdxl_weights)
 
-        # Resize the output if the provided dimensions are different from the current ones
-        if self.face_detection_input_width != face_detection_input_width or self.face_detection_input_height != face_detection_input_height:
-            print(f"[!] Resizing output to {face_detection_input_width}x{face_detection_input_height}")
-            self.face_detection_input_width = face_detection_input_width
-            self.face_detection_input_height = face_detection_input_height
-            self.app.prepare(ctx_id=0, det_size=(self.face_detection_input_width, self.face_detection_input_height))
+            # Resize the output if the provided dimensions are different from the current ones
+            if self.face_detection_input_width != face_detection_input_width or self.face_detection_input_height != face_detection_input_height:
+                print(f"[!] Resizing output to {face_detection_input_width}x{face_detection_input_height}")
+                self.face_detection_input_width = face_detection_input_width
+                self.face_detection_input_height = face_detection_input_height
+                self.app.prepare(ctx_id=0, det_size=(self.face_detection_input_width, self.face_detection_input_height))
 
-        # Set up ControlNet selection and their respective strength values (if any)
-        controlnet_selection = []
-        if pose_strength > 0 and enable_pose_controlnet:
-            controlnet_selection.append("pose")
-        if canny_strength > 0 and enable_canny_controlnet:
-            controlnet_selection.append("canny")
-        if depth_strength > 0 and enable_depth_controlnet:
-            controlnet_selection.append("depth")
+            # Set up ControlNet selection and their respective strength values (if any)
+            controlnet_selection = []
+            if pose_strength > 0 and enable_pose_controlnet:
+                controlnet_selection.append("pose")
+            if canny_strength > 0 and enable_canny_controlnet:
+                controlnet_selection.append("canny")
+            if depth_strength > 0 and enable_depth_controlnet:
+                controlnet_selection.append("depth")
 
-        # Switch to LCM inference steps and guidance scale if LCM is enabled
-        if enable_lcm:
-            num_inference_steps = lcm_num_inference_steps
-            guidance_scale = lcm_guidance_scale
+            # Switch to LCM inference steps and guidance scale if LCM is enabled
+            if enable_lcm:
+                num_inference_steps = lcm_num_inference_steps
+                guidance_scale = lcm_guidance_scale
 
-        # Generate
-        images = self.generate_image(
-            face_image_path=str(image),
-            pose_image_path=str(pose_image) if pose_image else None,
-            prompt=prompt,
-            negative_prompt=negative_prompt,
-            num_steps=num_inference_steps,
-            identitynet_strength_ratio=controlnet_conditioning_scale,
-            adapter_strength_ratio=ip_adapter_scale,
-            pose_strength=pose_strength,
-            canny_strength=canny_strength,
-            depth_strength=depth_strength,
-            controlnet_selection=controlnet_selection,
-            scheduler=scheduler,
-            guidance_scale=guidance_scale,
-            seed=seed,
-            enable_LCM=enable_lcm,
-            enhance_face_region=enhance_nonface_region,
-            num_images_per_prompt=num_outputs,
-        )
+            # Generate
+            images = self.generate_image(
+                face_image_path=str(image),
+                pose_image_path=str(pose_image) if pose_image else None,
+                prompt=prompt,
+                negative_prompt=negative_prompt,
+                num_steps=num_inference_steps,
+                identitynet_strength_ratio=controlnet_conditioning_scale,
+                adapter_strength_ratio=ip_adapter_scale,
+                pose_strength=pose_strength,
+                canny_strength=canny_strength,
+                depth_strength=depth_strength,
+                controlnet_selection=controlnet_selection,
+                scheduler=scheduler,
+                guidance_scale=guidance_scale,
+                seed=seed,
+                enable_LCM=enable_lcm,
+                enhance_face_region=enhance_nonface_region,
+                num_images_per_prompt=num_outputs,
+            )
 
-        # Save the generated images and check for NSFW content
-        output_paths = []
-        for i, output_image in enumerate(images):
-            if not disable_safety_checker:
-                _, has_nsfw_content_list = self.run_safety_checker(output_image)
-                has_nsfw_content = any(has_nsfw_content_list)
-                print(f"NSFW content detected: {has_nsfw_content}")
-                if has_nsfw_content:
-                    raise Exception(
-                        "NSFW content detected. Try running it again, or try a different prompt."
-                    )
+            # Save the generated images and check for NSFW content
+            output_paths = []
+            for i, output_image in enumerate(images):
+                if not disable_safety_checker:
+                    _, has_nsfw_content_list = self.run_safety_checker(output_image)
+                    has_nsfw_content = any(has_nsfw_content_list)
+                    print(f"NSFW content detected: {has_nsfw_content}")
+                    if has_nsfw_content:
+                        raise Exception(
+                            "NSFW content detected. Try running it again, or try a different prompt."
+                        )
 
-            extension = output_format.lower()
-            extension = "jpeg" if extension == "jpg" else extension
-            output_path = f"/tmp/out_{i}.{extension}"
+                extension = output_format.lower()
+                extension = "jpeg" if extension == "jpg" else extension
+                output_path = f"/tmp/out_{i}.{extension}"
 
-            print(f"[~] Saving to {output_path}...")
-            print(f"[~] Output format: {extension.upper()}")
-            if output_format != "png":
-                print(f"[~] Output quality: {output_quality}")
+                print(f"[~] Saving to {output_path}...")
+                print(f"[~] Output format: {extension.upper()}")
+                if output_format != "png":
+                    print(f"[~] Output quality: {output_quality}")
 
-            save_params = {"format": extension.upper()}
-            if output_format != "png":
-                save_params["quality"] = output_quality
-                save_params["optimize"] = True
+                save_params = {"format": extension.upper()}
+                if output_format != "png":
+                    save_params["quality"] = output_quality
+                    save_params["optimize"] = True
 
-            output_image.save(output_path, **save_params)
-            output_paths.append(Path(output_path))
-        return output_paths
+                output_image.save(output_path, **save_params)
+                output_paths.append(Path(output_path))
+
+                # empyting the cache
+                torch.cuda.empty_cache()
+            return output_paths
