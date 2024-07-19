@@ -294,18 +294,19 @@ class Predictor(BasePredictor):
         if is_hugging_face_model:
 
             try:
-                print(f"loading vae autoencoder")
-                vae_model = "madebyollin/taesd3"
-                vae = AutoencoderTiny.from_pretrained(vae_model, torch_dtype=torch.float16)
+                # print(f"loading vae autoencoder")
+                # vae_model = "madebyollin/taesd3"
+                # vae = AutoencoderTiny.from_pretrained(vae_model, torch_dtype=torch.float16)
+
                 self.pipe = StableDiffusionXLInstantIDPipeline.from_pretrained(
                     weights_info["slug"],
                     controlnet=[self.controlnet_identitynet],
                     torch_dtype=DTYPE,
                     cache_dir=CHECKPOINTS_CACHE,
-                    vae=vae,
                     safety_checker=None,
                     feature_extractor=None,
                 )
+
             except Exception as _e:
                 print(f"error in loading vae: {_e}")
 
