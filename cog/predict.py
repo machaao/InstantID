@@ -22,7 +22,7 @@ import PIL
 from PIL import Image
 
 import diffusers
-from diffusers import LCMScheduler
+from diffusers import LCMScheduler, AutoencoderTiny
 from diffusers.utils import load_image
 from diffusers.models import ControlNetModel
 from diffusers.pipelines.controlnet.multicontrolnet import MultiControlNetModel
@@ -45,6 +45,13 @@ mimetypes.add_type("image/webp", ".webp")
 # GPU global variables
 DEVICE = get_torch_device()
 DTYPE = torch.float16 if str(DEVICE).__contains__("cuda") else torch.float32
+
+torch.set_float32_matmul_precision("high")
+
+torch._inductor.config.conv_1x1_as_mm = True
+torch._inductor.config.coordinate_descent_tuning = True
+torch._inductor.config.epilogue_fusion = False
+torch._inductor.config.coordinate_descent_check_all_directions = True
 
 # for `ip-adapter`, `ControlNetModel`, and `stable-diffusion-xl-base-1.0`
 CHECKPOINTS_CACHE = "./checkpoints"
@@ -285,14 +292,22 @@ class Predictor(BasePredictor):
 
         print(f"[~] Loading new SDXL weights: {path_to_weights_file}")
         if is_hugging_face_model:
-            self.pipe = StableDiffusionXLInstantIDPipeline.from_pretrained(
-                weights_info["slug"],
-                controlnet=[self.controlnet_identitynet],
-                torch_dtype=DTYPE,
-                cache_dir=CHECKPOINTS_CACHE,
-                safety_checker=None,
-                feature_extractor=None,
-            )
+
+            try:
+                print(f"loading vae autoencoder")
+                vae_model = "madebyollin/taesd3"
+                vae = AutoencoderTiny.from_pretrained(vae_model, torch_dtype=torch.float16)
+                self.pipe = StableDiffusionXLInstantIDPipeline.from_pretrained(
+                    weights_info["slug"],
+                    controlnet=[self.controlnet_identitynet],
+                    torch_dtype=DTYPE,
+                    cache_dir=CHECKPOINTS_CACHE,
+                    vae=vae,
+                    safety_checker=None,
+                    feature_extractor=None,
+                )
+            except Exception as _e:
+                print(f"error in loading vae: {_e}")
 
             self.pipe.scheduler = diffusers.EulerDiscreteScheduler.from_config(
                 self.pipe.scheduler.config
@@ -437,9 +452,7 @@ class Predictor(BasePredictor):
             face_info = sorted(
                 face_info,
                 key=lambda x: (x["bbox"][2] - x["bbox"][0]) * x["bbox"][3] - x["bbox"][1],
-            )[
-                -1
-            ]
+            )[-1]
 
             # add to cache for speed up
             print(f"adding to the face cache: {face_image_path}")
@@ -706,6 +719,10 @@ class Predictor(BasePredictor):
 
         # adding this to reduce GPU consumption
         with torch.no_grad():
+            # load vae
+
+
+
             # Load the weights if they are different from the base weights
             if sdxl_weights != self.base_weights:
                 self.load_weights(sdxl_weights)
