@@ -347,14 +347,19 @@ class Predictor(BasePredictor):
         print(f"[~] Seting up pose, canny, depth ControlNets")
 
         controlnet_pose_model = "thibaud/controlnet-openpose-sdxl-1.0"
-        controlnet_canny_model = "diffusers/controlnet-canny-sdxl-1.0"
-        controlnet_depth_model = "diffusers/controlnet-depth-sdxl-1.0-small"
+        # controlnet_canny_model = "diffusers/controlnet-canny-sdxl-1.0"
+        # controlnet_depth_model = "diffusers/controlnet-depth-sdxl-1.0-small"
+        # controlnets = [
+        #     "models--diffusers--controlnet-canny-sdxl-1.0",
+        #     "models--diffusers--controlnet-depth-sdxl-1.0-small",
+        #     "models--thibaud--controlnet-openpose-sdxl-1.0",
+        # ]
 
-        for controlnet_key in [
-            "models--diffusers--controlnet-canny-sdxl-1.0",
-            "models--diffusers--controlnet-depth-sdxl-1.0-small",
+        controlnets = [
             "models--thibaud--controlnet-openpose-sdxl-1.0",
-        ]:
+        ]
+
+        for controlnet_key in controlnets:
             controlnet_path = f"checkpoints/{controlnet_key}"
             if not os.path.exists(controlnet_path):
                 download_weights(
@@ -362,34 +367,48 @@ class Predictor(BasePredictor):
                     controlnet_path,
                 )
 
+        # only enabling pose for now (to save memory)
         controlnet_pose = ControlNetModel.from_pretrained(
             controlnet_pose_model,
             torch_dtype=DTYPE,
             cache_dir=CHECKPOINTS_CACHE,
             local_files_only=True,
         ).to(DEVICE)
-        controlnet_canny = ControlNetModel.from_pretrained(
-            controlnet_canny_model,
-            torch_dtype=DTYPE,
-            cache_dir=CHECKPOINTS_CACHE,
-            local_files_only=True,
-        ).to(DEVICE)
-        controlnet_depth = ControlNetModel.from_pretrained(
-            controlnet_depth_model,
-            torch_dtype=DTYPE,
-            cache_dir=CHECKPOINTS_CACHE,
-            local_files_only=True,
-        ).to(DEVICE)
+
+        # canny and depth not being used
+
+        # controlnet_canny = ControlNetModel.from_pretrained(
+        #     controlnet_canny_model,
+        #     torch_dtype=DTYPE,
+        #     cache_dir=CHECKPOINTS_CACHE,
+        #     local_files_only=True,
+        # ).to(DEVICE)
+
+        # controlnet_depth = ControlNetModel.from_pretrained(
+        #     controlnet_depth_model,
+        #     torch_dtype=DTYPE,
+        #     cache_dir=CHECKPOINTS_CACHE,
+        #     local_files_only=True,
+        # ).to(DEVICE)
+
+        # self.controlnet_map = {
+        #     "pose": controlnet_pose,
+        #     "canny": controlnet_canny,
+        #     "depth": controlnet_depth,
+        # }
 
         self.controlnet_map = {
-            "pose": controlnet_pose,
-            "canny": controlnet_canny,
-            "depth": controlnet_depth,
+            "pose": controlnet_pose
         }
+
+        # self.controlnet_map_fn = {
+        #     "pose": openpose,
+        #     "canny": get_canny_image,
+        #     "depth": get_depth_map,
+        # }
+
         self.controlnet_map_fn = {
-            "pose": openpose,
-            "canny": get_canny_image,
-            "depth": get_depth_map,
+            "pose": openpose
         }
 
     def generate_image(
@@ -402,8 +421,8 @@ class Predictor(BasePredictor):
         identitynet_strength_ratio,
         adapter_strength_ratio,
         pose_strength,
-        canny_strength,
-        depth_strength,
+        # canny_strength,
+        # depth_strength,
         controlnet_selection,
         guidance_scale,
         seed,
@@ -504,11 +523,16 @@ class Predictor(BasePredictor):
             control_mask = None
 
         if len(controlnet_selection) > 0:
+            # controlnet_scales = {
+            #     "pose": pose_strength,
+            #     "canny": canny_strength,
+            #     "depth": depth_strength,
+            # }
+
             controlnet_scales = {
-                "pose": pose_strength,
-                "canny": canny_strength,
-                "depth": depth_strength,
+                "pose": pose_strength
             }
+
             self.pipe.controlnet = MultiControlNetModel(
                 [self.controlnet_identitynet]
                 + [self.controlnet_map[s] for s in controlnet_selection]
@@ -646,26 +670,26 @@ class Predictor(BasePredictor):
             ge=0,
             le=1,
         ),
-        enable_canny_controlnet: bool = Input(
-            description="Enable Canny ControlNet, overrides strength if set to false",
-            default=False,
-        ),
-        canny_strength: float = Input(
-            description="Canny ControlNet strength, effective only if `enable_canny_controlnet` is true",
-            default=0.3,
-            ge=0,
-            le=1,
-        ),
-        enable_depth_controlnet: bool = Input(
-            description="Enable Depth ControlNet, overrides strength if set to false",
-            default=False,
-        ),
-        depth_strength: float = Input(
-            description="Depth ControlNet strength, effective only if `enable_depth_controlnet` is true",
-            default=0.5,
-            ge=0,
-            le=1,
-        ),
+        # enable_canny_controlnet: bool = Input(
+        #     description="Enable Canny ControlNet, overrides strength if set to false",
+        #     default=False,
+        # ),
+        # canny_strength: float = Input(
+        #     description="Canny ControlNet strength, effective only if `enable_canny_controlnet` is true",
+        #     default=0.3,
+        #     ge=0,
+        #     le=1,
+        # ),
+        # enable_depth_controlnet: bool = Input(
+        #     description="Enable Depth ControlNet, overrides strength if set to false",
+        #     default=False,
+        # ),
+        # depth_strength: float = Input(
+        #     description="Depth ControlNet strength, effective only if `enable_depth_controlnet` is true",
+        #     default=0.5,
+        #     ge=0,
+        #     le=1,
+        # ),
         enable_lcm: bool = Input(
             description="Enable Fast Inference with LCM (Latent Consistency Models) - speeds up inference steps, trade-off is the quality of the generated image. Performs better with close-up portrait face images",
             default=False,
@@ -739,10 +763,11 @@ class Predictor(BasePredictor):
             controlnet_selection = []
             if pose_strength > 0 and enable_pose_controlnet:
                 controlnet_selection.append("pose")
-            if canny_strength > 0 and enable_canny_controlnet:
-                controlnet_selection.append("canny")
-            if depth_strength > 0 and enable_depth_controlnet:
-                controlnet_selection.append("depth")
+
+            # if canny_strength > 0 and enable_canny_controlnet:
+            #     controlnet_selection.append("canny")
+            # if depth_strength > 0 and enable_depth_controlnet:
+            #     controlnet_selection.append("depth")
 
             # Switch to LCM inference steps and guidance scale if LCM is enabled
             if enable_lcm:
@@ -750,6 +775,26 @@ class Predictor(BasePredictor):
                 guidance_scale = lcm_guidance_scale
 
             # Generate
+            # images = self.generate_image(
+            #     face_image_path=str(image),
+            #     pose_image_path=str(pose_image) if pose_image else None,
+            #     prompt=prompt,
+            #     negative_prompt=negative_prompt,
+            #     num_steps=num_inference_steps,
+            #     identitynet_strength_ratio=controlnet_conditioning_scale,
+            #     adapter_strength_ratio=ip_adapter_scale,
+            #     pose_strength=pose_strength,
+            #     canny_strength=canny_strength,
+            #     depth_strength=depth_strength,
+            #     controlnet_selection=controlnet_selection,
+            #     scheduler=scheduler,
+            #     guidance_scale=guidance_scale,
+            #     seed=seed,
+            #     enable_LCM=enable_lcm,
+            #     enhance_face_region=enhance_nonface_region,
+            #     num_images_per_prompt=num_outputs,
+            # )
+
             images = self.generate_image(
                 face_image_path=str(image),
                 pose_image_path=str(pose_image) if pose_image else None,
@@ -759,8 +804,6 @@ class Predictor(BasePredictor):
                 identitynet_strength_ratio=controlnet_conditioning_scale,
                 adapter_strength_ratio=ip_adapter_scale,
                 pose_strength=pose_strength,
-                canny_strength=canny_strength,
-                depth_strength=depth_strength,
                 controlnet_selection=controlnet_selection,
                 scheduler=scheduler,
                 guidance_scale=guidance_scale,
